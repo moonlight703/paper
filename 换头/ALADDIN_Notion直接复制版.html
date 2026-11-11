@@ -1,0 +1,484 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ALADDIN 论文中文翻译｜Notion 公网图片版</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f4f4f5;color:#27272a;font:16px/1.72 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}.toolbar{position:sticky;top:0;z-index:10;padding:12px 18px;background:#fff;border-bottom:1px solid #d4d4d8}button{border:0;border-radius:6px;padding:10px 18px;background:#2563eb;color:#fff;font-weight:650;cursor:pointer}article{width:min(900px,calc(100% - 32px));margin:28px auto;padding:52px 64px;background:#fff;border:1px solid #d4d4d8}h1{font-size:30px}h2{font-size:24px;margin-top:42px;border-bottom:1px solid #d4d4d8;padding-bottom:8px}h3{font-size:19px;margin-top:30px}blockquote{padding:10px 16px;border-left:3px solid #d4d4d8;color:#71717a}img{display:block;max-width:100%;height:auto;margin:18px auto}img.math-inline{display:inline-block;margin:0 .1em;vertical-align:-.3em;max-height:1.55em;width:auto}img.math-display{display:block;margin:18px auto;max-width:100%;height:auto}hr{border:0;border-top:1px solid #d4d4d8;margin:36px 0}code{background:#f4f4f5;padding:2px 5px;border-radius:4px}@media(max-width:700px){article{padding:28px 20px}}
+</style></head><body><div class="toolbar"><button id="copy">复制全文到 Notion</button> 图片与公式使用公网 PNG，Notion 可直接抓取。</div><article id="content"><h1>ALADDIN：用于单步身份交换的对抗式潜空间扩散蒸馏</h1>
+<blockquote>
+<p>英文题目：<strong>Adversarial Latent Diffusion Distillation for One-Step Identity Swapping</strong><br />
+作者：Ivan Shchekotov、Timofei Gritsaev、Viacheslav Pirogov、Dmitry Vetrov<br />
+机构：Constructor University、Sumsub<br />
+原文：arXiv:2610.37503v1，2026-10-27<br />
+说明：本文档按原论文结构进行详细中文翻译与技术解读，保留全部公式、5 幅图片、4 张表及补充材料。参考文献编号沿用原文。</p>
+</blockquote>
+<hr />
+<h2>一、论文核心内容概览</h2>
+<p>ALADDIN 是一种<strong>只需一次神经网络前向计算（1 NFE）的人脸身份交换模型</strong>。输入包括：</p>
+<ul>
+<li><strong>源图像</strong> <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-000.png" alt="公式 1">：提供需要迁移的人物身份；</li>
+<li><strong>目标图像</strong> <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-001.png" alt="公式 2">：提供姿态、表情、发型、眼镜、光照、服饰和背景；</li>
+<li><strong>输出图像</strong> <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-002.png" alt="公式 3">：身份应与源图像一致，其余属性尽可能与目标图像一致。</li>
+</ul>
+<p>现有 GAN 换脸模型推理很快，但通常真实感较弱；扩散模型真实感强，却需要几十次网络计算。ALADDIN 的做法是：</p>
+<ol>
+<li>从预训练的多步 FLUX 流匹配模型初始化生成器；</li>
+<li>使用冻结扩散模型的中间特征构造判别器；</li>
+<li>使用身份、姿态、表情、背景及重建损失进行约束；</li>
+<li>先训练教师模型，再利用三元组伪标签训练学生模型；</li>
+<li>通过学生阶段的重建权重 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-003.png" alt="公式 4">，显式控制“身份迁移强度”和“目标属性保持程度”的取舍。</li>
+</ol>
+<p>主要结论：</p>
+<ul>
+<li>在单步模型中，ALADDIN 的真实感和目标属性保持能力达到最优水平；</li>
+<li>与 28 步 APPLE 相比，ALADDIN 只需 1 次网络计算，推理计算量减少约 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-004.png" alt="公式 5">；</li>
+<li>训练图像对数量减少一个数量级；</li>
+<li>作者发现既有评测常用与训练相同的身份编码器，导致身份相似度存在正向偏差，并提出独立编码器评测协议。</li>
+</ul>
+<hr />
+<h2>二、图 1：总体换脸效果</h2>
+<p><img alt="图1：ALADDIN 在 FFHQ 上的换脸结果" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/figure-1.png" /></p>
+<p><strong>图 1 中文说明：</strong> 每组示例左上角为源身份，左下角为目标图像，右侧为模型输出。模型把源人物身份迁移到目标上，同时保留目标的姿态、表情、发型、眼镜、光照和背景。</p>
+<hr />
+<h2>三、摘要翻译</h2>
+<p>人脸交换的目标，是把源图像中的人物身份迁移到目标图像，同时保留目标图像的姿态、表情、头发和光照。当前最逼真的方法通常基于扩散模型，但每生成一张图像都需要多次网络计算。GAN 方法速度快，但从零开始训练时，只能依赖对抗信号学习真实感，因此生成质量明显较弱。</p>
+<p>本文提出 <strong>ALADDIN</strong>（Adversarial LAtent Diffusion Distillation for One-Step Identity SwappiNg）：一种单步人脸交换模型。其生成器由预训练的多步流匹配模型初始化，并在身份保持和目标属性保持约束下进行对抗训练。作者进一步使用三元组伪标签监督训练学生模型，使身份迁移与目标属性保持之间的取舍可以调节。</p>
+<p>论文还指出，标准评测协议存在偏差：如果某种方法在训练时使用了与评测相同的身份编码器，那么该方法的身份分数会被高估。作者因此使用独立身份编码器重新评测所有基线。</p>
+<p>在身份迁移能力相近时，ALADDIN 在单步方法中取得最先进的真实感和目标属性保持效果；它还可匹配最佳多步方法 APPLE，但网络计算次数减少 28 倍，训练图像对数量减少一个数量级。</p>
+<hr />
+<h2>四、引言</h2>
+<p>人脸交换需要把源人物身份迁移到目标人脸，同时保持目标图像中的背景、头发、姿态、表情、光照和配饰。其应用包括影视制作和隐私保护。</p>
+<p>早期系统只能从固定人脸库中替换，或需要大量人工操作；现代方法则主要依赖神经网络。</p>
+<h3>4.1 GAN 路线</h3>
+<p>GAN 换脸方法大致分为两类：</p>
+<ol>
+<li><strong>直接生成方法</strong>：如 SimSwap、HiFiFace、FaceDancer、InfoSwap。它们端到端训练生成器，同时优化身份、属性保持和对抗损失。</li>
+<li><strong>GAN 反演方法</strong>：如 MegaFS、E4S。它们先把真实人脸映射到预训练 StyleGAN 的潜空间，再对潜变量进行身份替换。</li>
+</ol>
+<p>直接生成方法必须仅依赖对抗训练从头学习图像真实感，同时还要平衡身份和属性目标，因此在大姿态、脸型变化或遮挡场景下容易出现局部伪影。反演方法继承了 StyleGAN 的图像先验，但真实图像反演可能丢失身份细节，或把潜变量推到生成器训练分布之外。</p>
+<h3>4.2 扩散路线</h3>
+<p>扩散模型具有更强的图像先验和更稳定的训练过程，通常比 GAN 更逼真，但推理需要数十次网络计算。已有换脸模型包括 DiffFace、DiffSwap、REFace、FaceAdapter、DreamID 和 APPLE。</p>
+<ul>
+<li>DiffFace：身份条件 DDPM，采样时使用身份、语义和视线梯度引导，计算开销大；</li>
+<li>DiffSwap：采用三维感知掩码扩散，并使用关键点和人脸掩码保持姿态与表情；</li>
+<li>REFace：把潜扩散建模为条件修复任务，在训练中展开多个 DDIM 步；</li>
+<li>FaceAdapter：把身份、空间结构和属性条件显式分离；</li>
+<li>DreamID：利用三元组身份组构造换脸真值，并基于 SD-Turbo 实现一步生成；</li>
+<li>APPLE：改进伪三元组构造，目标属性保持更强，但仍为多步模型，训练成本较高。</li>
+</ul>
+<h3>4.3 本文贡献</h3>
+<ol>
+<li>提出 ALADDIN：一种简单、单步、在单步方法中达到最先进质量的人脸交换方法；</li>
+<li>超过几乎所有多步基线，并达到 APPLE 的质量，但训练图像对少一个数量级，推理网络计算次数少 28 倍；</li>
+<li>揭示既有身份相似度评测中的编码器偏差，并使用独立模型重新评测所有基线。</li>
+</ol>
+<hr />
+<h2>五、方法</h2>
+<h3>5.1 单步条件生成</h3>
+<p>给定源图像 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-005.png" alt="公式 6"> 和目标图像 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-006.png" alt="公式 7">，生成器 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-007.png" alt="公式 8"> 一步产生换脸结果：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-008.png" alt="公式 9"></p>
+<p>其中：</p>
+<ul>
+<li><img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-009.png" alt="公式 10">：生成图像；</li>
+<li><img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-010.png" alt="公式 11">：带源身份条件的流匹配模型所预测的速度；</li>
+<li><img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-011.png" alt="公式 12">：固定生成噪声级别，设为 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-012.png" alt="公式 13">；</li>
+<li><img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-013.png" alt="公式 14"> 被视为位于噪声级别 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-014.png" alt="公式 15"> 的样本；</li>
+<li>公式实际在冻结的 FLUX VAE 潜空间中执行，之后再解码到图像空间。</li>
+</ul>
+<p><img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-015.png" alt="公式 16"> 使模型训练初期不会离预训练初始化过远，因而提供较温和、稳定的初始状态。</p>
+<h3>5.2 图 2：完整训练框架</h3>
+<p><img alt="图2：ALADDIN 教师和学生训练流程" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/figure-2.png" /></p>
+<p><strong>左侧——教师训练：</strong></p>
+<ul>
+<li>教师生成器 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-016.png" alt="公式 17"> 接收目标图像和经冻结 PuLID 编码的源身份；</li>
+<li>单步生成 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-017.png" alt="公式 18">；</li>
+<li>使用身份、姿态、表情和背景损失约束结果；</li>
+<li>将生成图像和真实图像的潜变量扩散到相同噪声级别；</li>
+<li>通过冻结扩散模型提取中间特征；</li>
+<li>判别器 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-018.png" alt="公式 19"> 判断特征来自真实图像还是生成图像。</li>
+</ul>
+<p><strong>右侧——学生训练：</strong></p>
+<ul>
+<li>冻结教师先根据身份 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-019.png" alt="公式 20"> 和身份 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-020.png" alt="公式 21"> 的目标图生成伪目标 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-021.png" alt="公式 22">；</li>
+<li>学生再把身份 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-022.png" alt="公式 23"> 换回该伪目标；</li>
+<li>因为真实图像 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-023.png" alt="公式 24"> 已知，所以可以使用重建损失直接监督。</li>
+</ul>
+<hr />
+<h2>六、训练目标与全部公式</h2>
+<h3>6.1 身份损失</h3>
+<p>通过最小化生成图像和源图像身份嵌入之间的余弦距离，促进身份迁移：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-024.png" alt="公式 25"></p>
+<p><img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-025.png" alt="公式 26"> 是冻结的人脸识别网络。当两个身份嵌入的余弦相似度达到 1 时，损失为 0，表示身份迁移充分。</p>
+<h3>6.2 对抗真实感损失</h3>
+<p>仅使用身份损失时，模型很容易让输出在身份特征空间接近源图像，却可能产生严重伪影。因此作者同时使用对抗训练；在存在真值的训练组中还使用重建损失。</p>
+<p>令冻结 VAE 编码器为 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-026.png" alt="公式 27">，则：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-027.png" alt="公式 28"></p>
+<p>其中 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-028.png" alt="公式 29"> 为生成换脸图的潜变量，<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-029.png" alt="公式 30"> 为真实图像 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-030.png" alt="公式 31"> 的潜变量；实现中同一批次的目标图像作为真实样本。两者使用同一个噪声级别 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-031.png" alt="公式 32"> 和噪声 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-032.png" alt="公式 33"> 做线性扰动：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-033.png" alt="公式 34"></p>
+<p>真实分支同理得到 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-034.png" alt="公式 35">。之后将二者输入冻结扩散模型，截取 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-035.png" alt="公式 36"> 个模块的中间激活：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-036.png" alt="公式 37"></p>
+<p>每一层激活由独立判别头读取，最终真实感得分为：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-037.png" alt="公式 38"></p>
+<p>只有判别头 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-038.png" alt="公式 39"> 和聚合权重的 logits <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-039.png" alt="公式 40"> 可训练，扩散模型本身保持冻结。可学习权重让训练过程自行决定哪些层的特征最有判别价值。</p>
+<p>判别器采用非饱和 GAN 目标。<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-040.png" alt="公式 41"> 输出样本为真实图像的概率：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-041.png" alt="公式 42"></p>
+<p>生成器的对抗损失为：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-042.png" alt="公式 43"></p>
+<p>关键思想是：判别器不直接读取像素或原始潜变量，而读取预训练扩散模型的中间特征。不同深度的特征已经编码了从全局脸部几何结构到皮肤微观纹理的多尺度先验，因此判别器不必仅从对抗信号中重新学习“真实人脸应是什么样子”。</p>
+<h3>6.3 重建损失</h3>
+<p>当训练对中的源图像和目标图像属于同一身份时，目标图像本身就是正确输出，因此可定义：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-043.png" alt="公式 44"></p>
+<p><img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-044.png" alt="公式 45"> 可以是 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-045.png" alt="公式 46">、<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-046.png" alt="公式 47"> 或感知距离。实验发现 LPIPS 比 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-047.png" alt="公式 48"> 有更好的定量结果，因此最终采用 LPIPS。</p>
+<h3>6.4 姿态损失</h3>
+<p>作者使用冻结的 6DRepNet 估计头部方向：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-048.png" alt="公式 49"></p>
+<p>旋转矩阵的三列分别表示头部局部坐标系中的右、上、前三个方向。生成图与目标图姿态的测地距离为：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-049.png" alt="公式 50"></p>
+<p>其中：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-050.png" alt="公式 51"></p>
+<p>估计器参数不更新，但梯度会通过 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-051.png" alt="公式 52"> 回传至生成器。</p>
+<h3>6.5 表情损失</h3>
+<p>冻结的 DECA 为每张图像预测一个 50 维 FLAME 表情向量 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-052.png" alt="公式 53">。其维度对应学习到的表情 blendshape 权重，描述微笑、皱眉、张嘴等非身份几何形变，并与身份脸型、全局姿态、外观和光照分离。</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-053.png" alt="公式 54"></p>
+<p>其中 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-054.png" alt="公式 55">。该损失相当于系数维度上的一半均方误差，并在批次上取平均。</p>
+<h3>6.6 背景损失</h3>
+<p>作者用冻结的 SegFormer 人脸解析模型生成目标人脸掩码 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-055.png" alt="公式 56">，对边界进行膨胀和平滑，再二值化。掩码包含皮肤、鼻子、眉毛、眼睛、嘴、嘴唇和耳朵；补集 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-056.png" alt="公式 57"> 则包含目标图像的头发、眼镜、耳环、帽子、脖子、服装和普通背景。</p>
+<p>在掩码外区域计算归一化像素差：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-057.png" alt="公式 58"></p>
+<hr />
+<h2>七、三类训练数据组</h2>
+<h3>7.1 跨身份组（Cross Identity Group）</h3>
+<p>当：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-058.png" alt="公式 59"></p>
+<p>使用完整跨身份目标：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-059.png" alt="公式 60"></p>
+<p>身份损失负责身份迁移；GAN 损失负责真实感；后三项分别保持目标姿态、表情和背景。</p>
+<h3>7.2 同身份组（Same Identity Group）</h3>
+<p>当源图和目标图属于同一身份时：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-060.png" alt="公式 61"></p>
+<p>重建损失提供直接像素/感知监督，可提升图像质量。不能只用同身份组训练，因为模型简单复制目标图即可获得极低损失，却学不会真正的跨身份替换。姿态和表情损失无需单独加入，因为重建目标已经约束了这些属性。</p>
+<h3>7.3 三元组组（Triplet Group）</h3>
+<p>为了在源、目标身份不同时也使用重建损失，作者采用三元组伪标签。先取身份 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-061.png" alt="公式 62"> 的两张不同真实图像：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-062.png" alt="公式 63"></p>
+<p>再取身份 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-063.png" alt="公式 64"> 的源图 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-064.png" alt="公式 65">，用冻结教师 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-065.png" alt="公式 66"> 生成伪目标：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-066.png" alt="公式 67"></p>
+<p>该伪目标具有身份 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-067.png" alt="公式 68">，但保留 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-068.png" alt="公式 69"> 的目标属性。之后让学生把身份 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-069.png" alt="公式 70"> 换回去：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-070.png" alt="公式 71"></p>
+<p>理论上，<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-071.png" alt="公式 72"> 应恢复身份 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-072.png" alt="公式 73">，且继承伪目标中的属性；这些属性原本来自真实图 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-073.png" alt="公式 74">，所以 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-074.png" alt="公式 75"> 可作为重建真值。</p>
+<p>三元组目标为：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-075.png" alt="公式 76"></p>
+<h3>7.4 两阶段训练</h3>
+<ol>
+<li>教师在跨身份组和同身份组的混合数据上训练；</li>
+<li>学生由教师参数初始化，但判别器重新随机初始化；</li>
+<li>学生只在三元组数据上训练；</li>
+<li>冻结教师在线生成伪目标，不需要离线预计算；</li>
+<li>增大 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-076.png" alt="公式 77"> 会提高真实感与目标属性保持，但削弱身份迁移。</li>
+</ol>
+<p>论文把不同重建权重的学生记为 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-077.png" alt="公式 78">，实验报告 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-078.png" alt="公式 79">。</p>
+<hr />
+<h2>八、实验设置</h2>
+<h3>8.1 模型结构</h3>
+<ul>
+<li>生成器初始化：FLUX.1-Krea-dev；</li>
+<li>身份编码器：PuLID；</li>
+<li>属性条件分支：OminiControl；</li>
+<li>判别器特征骨干：同一个冻结 FLUX.1-Krea-dev Transformer；</li>
+<li>训练参数：所有 Transformer 块注意力投影上的 rank-64 LoRA，以及 PuLID 的交叉注意力层；</li>
+<li>其余主干参数冻结；</li>
+<li>分辨率：<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-079.png" alt="公式 80">；</li>
+<li>身份训练损失：在 Glint360K 上训练的 ArcFace；</li>
+<li>源图进入身份编码器前先做人脸区域掩码，降低目标属性泄漏；</li>
+<li>身份损失输入缩放为 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-080.png" alt="公式 81">，不做额外对齐。</li>
+</ul>
+<h3>8.2 训练数据</h3>
+<p>使用 VGGFace2-HQ 和 Arc2Face，二者都包含每个身份的多张图像，适合同身份组和三元组组。Arc2Face 与 VGGFace2-HQ 的批次采样比例为 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-081.png" alt="公式 82">。</p>
+<p>过滤后数据集包含：</p>
+<ul>
+<li>约 410 万张图像；</li>
+<li>约 54 万个身份。</li>
+</ul>
+<p>过滤过程：</p>
+<ol>
+<li>使用 AES 美学质量预测器，丢弃分数低于 5.1 的图像；</li>
+<li>对每个身份，选择与其他图平均身份相似度最高的图作为锚点；</li>
+<li>只保留与锚点相似度位于 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-082.png" alt="公式 83"> 的图像；</li>
+<li>新接纳图像必须与已接纳图像的相似度低于 0.95，以去除重复图片。</li>
+</ol>
+<h3>8.3 评测协议</h3>
+<p>在 REFace 使用的 1000 个固定 FFHQ 源—目标图像对上评测：</p>
+<ul>
+<li><strong>真实感</strong>：生成的 1000 张图与全部 70000 张 FFHQ 图之间的 CLIP ViT-B/32 Fréchet 距离，文中简称 FID；越低越好；</li>
+<li><strong>身份相似度</strong>：生成图与源图身份嵌入的余弦相似度；越高越好；</li>
+<li><strong>身份检索</strong>：在全部源人脸中检索正确身份，报告 Top-1 和 Top-5；越高越好；</li>
+<li><strong>姿态保持</strong>：Hopenet 估计的生成图与目标图姿态 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-083.png" alt="公式 84"> 距离；越低越好；</li>
+<li><strong>表情保持</strong>：Deep3DFace 估计的表达差异；越低越好。</li>
+</ul>
+<p>训练使用的姿态与表情估计器分别是 6DRepNet 和 DECA，评测使用 Hopenet 和 Deep3DFace，避免直接用训练监督网络给自己打分。</p>
+<hr />
+<h2>九、身份编码器偏差</h2>
+<p>既有论文常使用 MS1M–IR-SE50 同时进行训练、身份条件编码和评测。REFace 与 InfoSwap 都针对该编码器优化，因此用它评测会给予这些方法额外优势。</p>
+<p>作者改用 <strong>WebFace–R50</strong> 作为独立评测器。它是 iResNet-50 ArcFace，在 WebFace600K 上训练；除 InSwapper 把它用作身份条件外，其他比较方法都未针对它训练。对 InSwapper，论文又额外用 MS1M–IR-SE50 比较，以降低单一编码器带来的偏差。</p>
+<p>ALADDIN 的身份条件和身份损失使用 Glint–R100，而评测使用 WebFace–R50，因此模型未针对评测编码器优化。</p>
+<h3>表 1：既有协议中的身份编码器偏差</h3>
+<p><img alt="表1：不同身份编码器对同一模型的评分差异" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/table-1.png" /></p>
+<p><strong>表 1 中文数据：</strong></p>
+<ul>
+<li>REFace（针对 MS1M–IR-SE50 训练）：MS1M–IR-SE50 为 <strong>0.64</strong>，Glint–R100 为 0.41，WebFace–R50 为 0.39；</li>
+<li>InfoSwap（针对 MS1M–IR-SE50 训练）：MS1M–IR-SE50 为 <strong>0.58</strong>，Glint–R100 为 0.43，WebFace–R50 为 0.42；</li>
+<li>ALADDIN Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-084.png" alt="公式 85">（针对 Glint–R100 训练）：MS1M–IR-SE50 为 0.55，Glint–R100 为 <strong>0.54</strong>，WebFace–R50 为 0.50。</li>
+</ul>
+<p>结论：模型在其训练所针对的编码器上明显得分更高。仅使用 MS1M–IR-SE50 会把 REFace 的身份相似度从独立编码器下的约 0.39–0.41 抬高到 0.64，从而改变方法排名。</p>
+<hr />
+<h2>十、主要定量结果</h2>
+<h3>表 2：FFHQ 1000 对上的主结果</h3>
+<p><img alt="表2：主实验定量结果" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/table-2.png" /></p>
+<p>列顺序为：方法；FID（低优）；WebFace–R50 身份相似度（高优）；身份检索 Top-1/Top-5 百分比（高优）；姿态误差（低优）；表情误差（低优）。</p>
+<p><strong>单步方法：</strong></p>
+<ul>
+<li>MegaFS：15.54；0.38；84.5/89.7；4.50；1.14。</li>
+<li>E4S：12.00；0.37；77.9/87.9；4.47；1.30。</li>
+<li>HiFiFace：11.08；0.45；93.1/96.7；3.20；1.34。</li>
+<li>InSwapper：8.67；0.60；90.3/90.5；2.80；1.52。其身份条件编码器与此处评测编码器相同。</li>
+<li>CSCS：8.59；<strong>0.63</strong>；<strong>99.4/100</strong>；3.70；1.45。</li>
+<li>SimSwap：5.90；0.38；81.9/85.8；1.83；0.96。</li>
+<li>FaceDancer：4.86；0.34；78.8/90.3；2.27；0.74。</li>
+<li>InfoSwap：3.88；0.42；91.2/96.1；3.18；0.99。</li>
+</ul>
+<p><strong>多步方法：</strong></p>
+<ul>
+<li>FaceAdapter：9.33；0.47；96.1/99.0；4.01；1.20。</li>
+<li>DiffSwap：6.94；0.26；54.3/72.7；2.61；1.02。</li>
+<li>REFace：5.45；0.39；88.8/96.2；3.68；1.04。</li>
+<li>APPLE（28 步）：<strong>3.22</strong>；0.40；89.9/96.2；1.86；0.63。</li>
+</ul>
+<p><strong>ALADDIN，全部为单步：</strong></p>
+<ul>
+<li>Teacher：4.55；0.49；96.4/98.2；1.90；0.77。</li>
+<li>Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-085.png" alt="公式 86">：4.49；<strong>0.50</strong>；<strong>97.4/98.7</strong>；1.93；0.76。</li>
+<li>Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-086.png" alt="公式 87">：3.66；0.44；94.0/97.6；1.68；0.65。</li>
+<li>Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-087.png" alt="公式 88">：3.34；0.40；88.9/95.3；<strong>1.56</strong>；<strong>0.60</strong>。</li>
+</ul>
+<h3>10.1 与单步方法比较</h3>
+<ul>
+<li>ALADDIN 所有版本在全部四项指标上均超过 MegaFS 和 E4S；</li>
+<li>Teacher 和 Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-088.png" alt="公式 89"> 在所有指标上超过 HiFiFace；</li>
+<li>Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-089.png" alt="公式 90"> 在所有指标上超过 SimSwap、FaceDancer 和 InfoSwap；</li>
+<li>InSwapper 与 CSCS 的身份相似度更高，但真实感、姿态和表情明显更差；</li>
+<li>CSCS 的高身份分数部分来自直接粘贴源人脸，导致真实感和属性一致性降低；</li>
+<li>Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-090.png" alt="公式 91"> 和 Teacher 的 Top-1 检索率仅次于 CSCS。</li>
+</ul>
+<h3>10.2 与多步方法比较</h3>
+<ul>
+<li>ALADDIN 所有版本在全部指标上超过 DiffSwap 和 REFace；</li>
+<li>Teacher 和 Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-091.png" alt="公式 92"> 在全部指标上超过 FaceAdapter；</li>
+<li>APPLE 是唯一仍具竞争力的多步基线；</li>
+<li>Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-092.png" alt="公式 93"> 与 APPLE 身份相似度相同（0.40），FID 接近（3.34 对 3.22），表情更优（0.60 对 0.63），姿态也更优（1.56 对 1.86）；</li>
+<li>APPLE 需要 28 步，而 ALADDIN 只需 1 步。</li>
+</ul>
+<h3>10.3 训练成本</h3>
+<ul>
+<li>APPLE：教师使用 104 万图像对，学生另用 24 万图像对；4 张 A6000 共训练 12.78 天，其中 5.78 天用于以 28 步教师离线生成伪三元组；</li>
+<li>ALADDIN：教师只用 10 万图像对，4 张 H100 约 4.5 小时；学生只用 1.5 万图像对，约 50 分钟；</li>
+<li>ALADDIN 教师本身即为单步，因此伪目标可在线生成，不需要离线生成阶段。</li>
+</ul>
+<hr />
+<h2>十一、定性结果</h2>
+<h3>图 3：主要方法对比</h3>
+<p><img alt="图3：ALADDIN 与主要基线的定性对比" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/figure-3.png" /></p>
+<p>列从左到右为源图、目标图、ALADDIN Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-093.png" alt="公式 94">、ALADDIN Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-094.png" alt="公式 95">、InSwapper、CSCS、InfoSwap、REFace 和 APPLE。六行分别测试：</p>
+<ol>
+<li><strong>自然度</strong>：目标具有不常见发型；</li>
+<li><strong>年龄</strong>：源与目标年龄差很大；</li>
+<li><strong>眼镜</strong>：是否保持目标眼镜；</li>
+<li><strong>纹身</strong>：是否保持目标脸部纹身；</li>
+<li><strong>姿态</strong>：是否保持目标头部方向；</li>
+<li><strong>表情</strong>：是否保持目标表情。</li>
+</ol>
+<p>观察：</p>
+<ul>
+<li>GAN 方法更容易产生严重伪影；</li>
+<li>CSCS 有明显复制粘贴倾向，对目标适配不足；</li>
+<li>InSwapper 身份迁移较强，但受原模型 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-095.png" alt="公式 96"> 分辨率限制；</li>
+<li>InfoSwap 会改变目标头发、把眼镜镜片变透明，并扰动姿态和表情；</li>
+<li>REFace 常出现不真实纹理，且身份迁移不足；</li>
+<li>APPLE 是最强基线，但困难场景仍可能产生伪影；</li>
+<li>三元组训练后，ALADDIN 以极低推理成本达到 APPLE 级真实感与属性保持；</li>
+<li><img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-096.png" alt="公式 97"> 越大，真实感和目标属性保持越强，但身份迁移越弱。</li>
+</ul>
+<h3>图 4：更多困难属性</h3>
+<p><img alt="图4：性别、肤色、穿孔和源眼镜测试" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/figure-4.png" /></p>
+<p>四行分别测试：</p>
+<ul>
+<li>跨感知性别身份迁移；</li>
+<li>源与目标肤色差异显著；</li>
+<li>是否保持目标的穿孔配饰；</li>
+<li>是否避免把源图眼镜错误迁移到目标。</li>
+</ul>
+<p>作者观察到：</p>
+<ul>
+<li>InfoSwap 未能正确迁移性别身份特征；</li>
+<li>REFace 会把肤色向源图方向偏移，而包括 ALADDIN 在内的其他方法保留目标肤色；</li>
+<li>ALADDIN 与 APPLE 能保持目标穿孔；</li>
+<li>CSCS 会错误地把源图眼镜带到结果中。</li>
+</ul>
+<h3>图 5：图 3 中未展示的其他方法</h3>
+<p><img alt="图5：其余基线方法的定性对比" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/figure-5.png" /></p>
+<p>该图展示 MegaFS、E4S、HiFiFace、FaceDancer、FaceAdapter 和 DiffSwap 在与图 3 相同六类困难场景上的结果，用于补全全部基线的视觉比较。</p>
+<hr />
+<h2>十二、消融实验</h2>
+<p>消融只针对教师训练，不使用三元组组。为了公平比较，作者为每次训练选择身份相似度尽可能接近的收敛后检查点，使差异主要体现在 FID、姿态和表情。</p>
+<h3>表 3：教师训练消融</h3>
+<p><img alt="表3：数据混合比例和判别器输入消融" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/table-3.png" /></p>
+<p><strong>数据混合比例（跨身份/同身份）：</strong></p>
+<ul>
+<li><img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-097.png" alt="公式 98">：FID 5.50；身份 0.49；姿态 2.20；表情 0.95；</li>
+<li><img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-098.png" alt="公式 99">，最终 Teacher：FID <strong>4.55</strong>；身份 0.49；姿态 1.90；表情 <strong>0.77</strong>；</li>
+<li><img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-099.png" alt="公式 100">：FID 5.01；身份 0.49；姿态 <strong>1.87</strong>；表情 0.79。</li>
+</ul>
+<p>加入 25% 同身份数据，可通过真值重建明显改善 FID、姿态和表情；但把同身份比例提高到 50% 后，训练分布偏离实际跨身份部署场景，FID 从 4.55 恶化到 5.01。因此最佳比例为跨身份 75%、同身份 25%。</p>
+<p><strong>判别器输入：</strong></p>
+<ul>
+<li>用扩散中间特征、纯跨身份训练：FID 5.50；身份 0.49；姿态 2.20；表情 0.95；</li>
+<li>改为原始潜变量：FID <strong>20.46</strong>；身份 0.53；姿态 2.82；表情 1.13。</li>
+</ul>
+<p>原始潜变量判别器不包含“真实人脸应是什么样”的先验，很容易被生成器欺骗。它几乎无法提供有效真实感压力，使生成器主要迎合身份损失，产生严重伪影。该实验是论文最关键的消融证据。</p>
+<hr />
+<h2>十三、结论与局限</h2>
+<h3>13.1 结论</h3>
+<p>ALADDIN 从预训练流匹配模型初始化生成器，并进行对抗训练。它不需要传统的显式蒸馏目标：预训练扩散模型以两种方式提供真实感先验：</p>
+<ol>
+<li>作为生成器的初始化；</li>
+<li>作为判别器的冻结特征提取器。</li>
+</ol>
+<p>ALADDIN 在单步换脸模型中达到最先进水平，并在身份迁移、FID 和表情方面匹配最强多步基线 APPLE，在姿态上超过 APPLE，同时将网络计算次数从 28 次降到 1 次，训练数据减少一个数量级。</p>
+<h3>13.2 局限</h3>
+<ul>
+<li>对不常见的源身份，身份迁移能力下降；</li>
+<li>源与目标年龄差很大时效果会下降；</li>
+<li>目标保持最弱的 Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-100.png" alt="公式 101"> 可能丢失纹身；</li>
+<li>这些仍是整个人脸交换领域尚未完全解决的问题。</li>
+</ul>
+<h3>13.3 伦理考虑</h3>
+<p>换脸可能被用于制作未经同意或具有欺骗性的内容，而单步模型会进一步降低大规模滥用成本。作者称其研究动机主要来自：</p>
+<ul>
+<li>身份验证：生成真实换脸样本，用于训练和压力测试检测系统；</li>
+<li>影视制作。</li>
+</ul>
+<p>论文只使用既有换脸研究中常见的研究数据集，全部定性示例均来自 FFHQ。</p>
+<hr />
+<h2>十四、补充材料 A：完整实现细节</h2>
+<h3>14.1 噪声与判别器特征</h3>
+<ul>
+<li>生成器固定噪声级别：<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-101.png" alt="公式 102">；</li>
+<li>判别器读取 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-102.png" alt="公式 103"> 个特征图；</li>
+<li>特征来自冻结 Transformer 双流模块第 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-103.png" alt="公式 104"> 层；</li>
+<li>判别噪声级别：</li>
+</ul>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-104.png" alt="公式 105"></p>
+<ul>
+<li>生成器和判别器噪声均按调度器的分辨率相关 shift 重新缩放；</li>
+<li>实验发现特征提取前是否给潜变量加噪，对身份—真实感取舍无明显影响，因此保留 LADD 的加噪设计。</li>
+</ul>
+<h3>14.2 条件与损失权重</h3>
+<ul>
+<li>FLUX 固定文本提示词：<code>cinematic full head portrait</code>；</li>
+<li>guidance scale：4.5；</li>
+<li>所有模型：</li>
+</ul>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-105.png" alt="公式 106"></p>
+<ul>
+<li>判别器损失整体乘以 0.1；</li>
+<li>教师：</li>
+</ul>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-106.png" alt="公式 107"></p>
+<ul>
+<li>学生三元组目标内部：</li>
+</ul>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-107.png" alt="公式 108"></p>
+<p>只改变 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-108.png" alt="公式 109">。</p>
+<h3>14.3 优化器与训练资源</h3>
+<ul>
+<li>每训练一次生成器，对判别器更新一次；</li>
+<li>AdamW 学习率：</li>
+</ul>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-109.png" alt="公式 110"></p>
+<ul>
+<li>权重衰减：0.01；</li>
+<li>Adam 参数：</li>
+</ul>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-110.png" alt="公式 111"></p>
+<ul>
+<li>梯度裁剪：1.0；</li>
+<li>先 warmup 500 步，随后使用恒定学习率；</li>
+<li>4 张 H100；</li>
+<li>每张卡 batch size 为 5，有效 batch size 为 20。</li>
+</ul>
+<p>教师使用 10 万图像对，约 4.5 小时；每个学生使用 1.5 万图像对，约 50 分钟。</p>
+<h3>14.4 评测对的具体构造</h3>
+<p>1000 个 FFHQ 测试对按下式构造：</p>
+<p><img class="math-display" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-111.png" alt="公式 112"></p>
+<p>HiFiFace 有一次生成失败，因此其 FID、姿态和表情只基于 999 张图计算。</p>
+<h3>14.5 消融检查点</h3>
+<p>图像质量约在 7 万训练对后饱和。作者从收敛后检查点中选择身份相似度接近者：</p>
+<ul>
+<li>主实验 Teacher：10 万对检查点；</li>
+<li>纯跨身份：7 万对检查点；</li>
+<li>跨身份/同身份各 50%：8 万对检查点；</li>
+<li>原始潜变量判别器：训练 7 万对并报告最终检查点。</li>
+</ul>
+<hr />
+<h2>十五、补充材料 B：偏置协议下的完整结果</h2>
+<p>MS1M–IR-SE50 与 WebFace–R50 都使用 50 层骨干、ArcFace 目标和 512 维嵌入，但训练数据与结构不同：</p>
+<ul>
+<li>MS1M–IR-SE50：IR-SE 骨干，在 MS1MV2 上训练；约 582 万张图、85742 个身份；</li>
+<li>WebFace–R50：iResNet-50 骨干，在 WebFace600K/WebFace12M 上训练；超过 1200 万张图、约 60 万身份。</li>
+</ul>
+<p>WebFace–R50 的图像数约为前者 2 倍，身份数约为 7 倍，并在已有基准中表现更好，因此更适合做独立评测器。MS1M–IR-SE50 对几乎所有方法都给出更高的身份相似度，可能因为其训练数据较小且多样性较弱，身份嵌入空间区分能力不足。</p>
+<h3>表 4：旧的、有偏协议下的结果</h3>
+<p><img alt="表4：使用 MS1M–IR-SE50 评测身份的结果" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/table-4.png" /></p>
+<p>列顺序为方法；FID；MS1M–IR-SE50 身份相似度；姿态误差；表情误差。</p>
+<p><strong>单步方法：</strong></p>
+<ul>
+<li>MegaFS：15.54；0.48；4.50；1.14。</li>
+<li>E4S：12.00；0.49；4.47；1.30。</li>
+<li>HiFiFace：11.08；0.48；3.20；1.34。</li>
+<li>InSwapper：8.67；0.56；2.80；1.52。</li>
+<li>CSCS：8.59；0.61；3.70；1.45。</li>
+<li>SimSwap：5.90；0.49；<strong>1.83</strong>；0.96。</li>
+<li>FaceDancer：4.86；0.48；2.27；0.74。</li>
+<li>InfoSwap：3.88；0.58；3.18；0.99。</li>
+</ul>
+<p><strong>多步方法：</strong></p>
+<ul>
+<li>FaceAdapter：9.33；0.53；4.01；1.20。</li>
+<li>DiffSwap：6.94；0.34；2.61；1.02。</li>
+<li>REFace：5.45；<strong>0.64</strong>；3.68；1.04。</li>
+<li>APPLE：<strong>3.22</strong>；0.52；1.86；<strong>0.63</strong>。</li>
+</ul>
+<p><strong>ALADDIN：</strong></p>
+<ul>
+<li>Teacher：4.55；0.54；1.90；0.77。</li>
+<li>Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-112.png" alt="公式 113">：4.49；0.55；1.93；0.76。</li>
+</ul>
+<p>在该旧协议下，REFace 和 InfoSwap 看起来身份迁移极强，似乎没有方法能在所有指标上严格超过它们；但独立 WebFace–R50 协议下，InfoSwap 被 Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-113.png" alt="公式 114"> 全面超过，REFace 也落后于 APPLE 及多个 ALADDIN 版本。因此旧协议会导致错误的方法排名和结论。</p>
+<hr />
+<h2>十六、技术解读：为什么 ALADDIN 有效</h2>
+<h3>16.1 它并不是传统“教师轨迹蒸馏”</h3>
+<p>ALADDIN 的名称包含 Distillation，但它没有要求学生拟合教师的多步采样轨迹，也没有分布匹配蒸馏中的显式教师分数目标。其“蒸馏”更接近：</p>
+<ul>
+<li>把多步流模型作为单步生成器的强初始化；</li>
+<li>用冻结扩散模型的特征向单步生成器持续提供真实感约束；</li>
+<li>再用单步教师在线产生三元组伪标签。</li>
+</ul>
+<h3>16.2 核心创新是“扩散特征判别器”</h3>
+<p>若判别器只读取原始潜变量，它需要从有限对抗数据中自行学会脸部几何、纹理和真实感，结果 FID 从 5.50 恶化到 20.46。读取扩散模型中间特征后，判别器继承了预训练模型的多尺度人脸先验。该设计是 ALADDIN 从普通单步 GAN 中拉开质量差距的关键。</p>
+<h3>16.3 三元组监督解决“没有换脸真值”的问题</h3>
+<p>真实世界中通常不存在这样一张真值图：既具有源人物身份，又与某张目标图的姿态、表情、背景完全一致。三元组构造通过“先换成 B，再换回 A”，把原始真实图 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-114.png" alt="公式 115"> 变成可用真值，因而能够使用强重建监督。</p>
+<h3>16.4 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-115.png" alt="公式 116"> 是实际部署旋钮</h3>
+<ul>
+<li>小 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-116.png" alt="公式 117">：更强调源身份，身份分数高，但更可能改变目标局部属性；</li>
+<li>大 <img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-117.png" alt="公式 118">：更强调目标外观、姿态和表情，FID 更低，但源身份迁移变弱。</li>
+</ul>
+<p>因此论文没有宣称某一个学生版本在所有指标上绝对最优，而是报告 Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-118.png" alt="公式 119">、Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-119.png" alt="公式 120">、Student<img class="math-inline" src="https://raw.githubusercontent.com/moonlight703/paper/main/%E6%8D%A2%E5%A4%B4/ALADDIN_%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB_assets/formulas/formula-120.png" alt="公式 121"> 三个帕累托工作点。</p>
+<h3>16.5 评测设计本身也是贡献</h3>
+<p>身份编码器既可作为训练损失，也可作为评测指标。如果二者相同，模型可能学会该编码器特有的特征甚至缺陷，而不是真正改善人类感知下的身份一致性。论文通过训练与评测编码器分离，给出了更可信的横向比较。</p>
+<hr />
+<h2>十七、一句话总结</h2>
+<p><strong>ALADDIN 用预训练 FLUX 同时提供生成器初始化和判别器真实感特征，再以三元组伪标签训练可调学生模型，从而用一次网络前向计算达到接近 28 步扩散换脸模型的质量。</strong></p></article><script>document.getElementById('copy').onclick=()=>{const n=document.getElementById('content'),s=getSelection(),r=document.createRange();s.removeAllRanges();r.selectNodeContents(n);s.addRange(r);const ok=document.execCommand('copy');s.removeAllRanges();document.getElementById('copy').textContent=ok?'已复制，可粘贴到 Notion':'复制失败，请手动全选';};</script></body></html>
